@@ -17,12 +17,22 @@ logger = logging.getLogger(__name__)
 # Add the current directory to the path so we can import the api package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Check for required environment variables
-required_env_vars = ['GOOGLE_API_KEY', 'OPENAI_API_KEY']
-missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
-if missing_vars:
-    logger.warning(f"Missing environment variables: {', '.join(missing_vars)}")
-    logger.warning("Some functionality may not work correctly without these variables.")
+# Check for Ollama environment variables first
+ollama_url = os.environ.get('OLLAMA_URL')
+ollama_model = os.environ.get('OLLAMA_MODEL')
+
+# Determine which mode we're running in (Ollama or API services)
+if ollama_url and ollama_model:
+    logger.info(f"Ollama configuration detected: URL={ollama_url}, Model={ollama_model}")
+    logger.info("Running in Ollama mode (local-only AI) - Google and OpenAI APIs will not be used")
+else:
+    # Check for required environment variables for API services
+    required_env_vars = ['GOOGLE_API_KEY', 'OPENAI_API_KEY']
+    missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
+    if missing_vars:
+        logger.warning(f"Missing environment variables: {', '.join(missing_vars)}")
+        logger.warning("Some functionality may not work correctly without these variables.")
+        logger.info("To use local Ollama instead, set OLLAMA_URL and OLLAMA_MODEL environment variables")
 
 if __name__ == "__main__":
     # Get port from environment variable or use default
@@ -37,6 +47,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "api.api:app",
         host="0.0.0.0",
-        port=8001,
+        port=port,
         reload=True
     )

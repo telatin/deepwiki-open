@@ -7,8 +7,13 @@ from typing import List, Optional
 from starlette.responses import StreamingResponse
 import google.generativeai as genai
 
+from api.config import USE_OLLAMA, OLLAMA_URL, OLLAMA_MODEL
 from api.rag import RAG
 from api.data_pipeline import count_tokens, get_file_content
+
+# Import the Ollama client if needed
+if USE_OLLAMA:
+    from api.ollama_client import OllamaClient
 
 # Configure logging
 logging.basicConfig(
@@ -17,14 +22,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get API keys from environment variables
-google_api_key = os.environ.get('GOOGLE_API_KEY')
-
-# Configure Google Generative AI
-if google_api_key:
-    genai.configure(api_key=google_api_key)
+# Set up AI services based on configuration
+if USE_OLLAMA:
+    logger.info(f"Using Ollama for generation with URL: {OLLAMA_URL}, Model: {OLLAMA_MODEL}")
+    ollama_client = OllamaClient(api_url=OLLAMA_URL, default_model=OLLAMA_MODEL)
 else:
-    logger.warning("GOOGLE_API_KEY not found in environment variables")
+    # Get API keys from environment variables
+    google_api_key = os.environ.get('GOOGLE_API_KEY')
+    
+    # Configure Google Generative AI
+    if google_api_key:
+        genai.configure(api_key=google_api_key)
+    else:
+        logger.warning("GOOGLE_API_KEY not found in environment variables")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -233,32 +243,47 @@ This file contains...
 
         prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
 
-        # Initialize Google Generative AI model
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",  # Using the preferred model
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.8,
-                "top_k": 40
-            }
-        )
+        # Initialize the appropriate model based on configuration
+        if USE_OLLAMA:
+            # Use Ollama client
+            logger.info(f"Using Ollama model for streaming with {OLLAMA_MODEL}")
+            model = ollama_client
+            model_name = OLLAMA_MODEL
+        else:
+            # Initialize Google Generative AI model
+            logger.info("Using Google Gemini model for streaming")
+            model = genai.GenerativeModel(
+                model_name="gemini-2.0-flash",  # Using the preferred model
+                generation_config={
+                    "temperature": 0.7,
+                    "top_p": 0.8,
+                    "top_k": 40
+                }
+            )
+            model_name = "gemini-2.0-flash"
 
         # Create a streaming response
         async def response_stream():
             try:
                 # Generate streaming response
-                response = model.generate_content(prompt, stream=True)
+                if USE_OLLAMA:
+                    # Use Ollama client
+                    response = model.generate_content(
+                        prompt=prompt,
+                        model=model_name,
+                        stream=True,
+                        temperature=0.7,
+                        top_p=0.8,
+                        top_k=40
+                    )
+                else:
+                    # Use Google Gemini
+                    response = model.generate_content(prompt, stream=True)
 
                 # Stream the response
                 for chunk in response:
                     if hasattr(chunk, 'text'):
                         yield chunk.text
-
-                # Make sure to resolve the response to avoid gRPC warnings
-                # try:
-                #     response.resolve()
-                # except Exception as e:
-                #     logger.warning(f"Could not resolve response: {e}")
 
             except Exception as e:
                 logger.error(f"Error in streaming response: {str(e)}")
@@ -282,18 +307,24 @@ This file contains...
                         simplified_prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
 
                         # Try again with simplified prompt
-                        fallback_response = model.generate_content(simplified_prompt, stream=True)
+                        if USE_OLLAMA:
+                            # Use Ollama client with fallback
+                            fallback_response = model.generate_content(
+                                prompt=simplified_prompt,
+                                model=model_name,
+                                stream=True,
+                                temperature=0.7,
+                                top_p=0.8,
+                                top_k=40
+                            )
+                        else:
+                            # Use Google Gemini with fallback
+                            fallback_response = model.generate_content(simplified_prompt, stream=True)
 
                         # Stream the fallback response
                         for chunk in fallback_response:
                             if hasattr(chunk, 'text'):
                                 yield chunk.text
-
-                        # Resolve the fallback response
-                        # try:
-                        #     fallback_response.resolve()
-                        # except Exception as e2:
-                        #     logger.warning(f"Could not resolve fallback response: {e2}")
 
                     except Exception as e2:
                         logger.error(f"Error in fallback streaming response: {str(e2)}")

@@ -1,28 +1,31 @@
 from adalflow import GoogleGenAIClient
 from adalflow.components.model_client.openai_client import OpenAIClient
 import os
+import logging
+
+# Import the Ollama client
+from api.ollama_client import OllamaClient
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Get API keys and configuration from environment variables
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+OLLAMA_URL = os.environ.get('OLLAMA_URL')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL')
+
+# Determine which client to use based on environment variables
+USE_OLLAMA = OLLAMA_URL is not None and OLLAMA_MODEL is not None
 
 # Configuration for the isolated API
-configs = {
-    "embedder": {
-        "batch_size": 500,
-        "model_client": OpenAIClient,
-        "model_kwargs": {
-            "model": "text-embedding-3-small",
-            "dimensions": 256,
-            "encoding_format": "float",
-        },
-    },
+base_configs = {
     "retriever": {
         "top_k": 20,
-    },
-    "generator": {
-        "model_client": GoogleGenAIClient,
-        "model_kwargs": {
-            "model": "gemini-2.5-flash-preview-04-17",
-            "temperature": 0.7,
-            "top_p": 0.8,
-        },
     },
     "text_splitter": {
         "split_by": "word",
@@ -65,12 +68,58 @@ configs = {
     },
 }
 
-# Get API keys from environment variables
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
-
-# Set keys in environment (in case they're needed elsewhere in the code)
-if OPENAI_API_KEY:
-    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-if GOOGLE_API_KEY:
-    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+# Define configs based on the environment setup
+if USE_OLLAMA:
+    logger.info(f"Using Ollama with URL: {OLLAMA_URL} and model: {OLLAMA_MODEL}")
+    
+    # Set up Ollama-based configuration
+    configs = base_configs.copy()
+    configs.update({
+        "embedder": {
+            "batch_size": 500,
+            "model_client": OllamaClient,
+            "model_kwargs": {
+                "model": OLLAMA_MODEL,
+                "api_url": OLLAMA_URL,
+            },
+        },
+        "generator": {
+            "model_client": OllamaClient,
+            "model_kwargs": {
+                "model": OLLAMA_MODEL,
+                "api_url": OLLAMA_URL,
+                "temperature": 0.7,
+                "top_p": 0.8,
+            },
+        },
+    })
+else:
+    logger.info("Using Google and OpenAI APIs")
+    
+    # Set up Google/OpenAI-based configuration
+    configs = base_configs.copy()
+    configs.update({
+        "embedder": {
+            "batch_size": 500,
+            "model_client": OpenAIClient,
+            "model_kwargs": {
+                "model": "text-embedding-3-small",
+                "dimensions": 256,
+                "encoding_format": "float",
+            },
+        },
+        "generator": {
+            "model_client": GoogleGenAIClient,
+            "model_kwargs": {
+                "model": "gemini-2.5-flash-preview-04-17",
+                "temperature": 0.7,
+                "top_p": 0.8,
+            },
+        },
+    })
+    
+    # Set keys in environment (in case they're needed elsewhere in the code)
+    if OPENAI_API_KEY:
+        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+    if GOOGLE_API_KEY:
+        os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY

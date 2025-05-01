@@ -42,6 +42,11 @@ docker-compose up
 > 💡 **Where to get these keys:**
 > - Get a Google API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
 > - Get an OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+> - **Or use Ollama locally**: If you have [Ollama](https://ollama.ai/) running locally, you can use it instead:
+>   ```bash
+>   echo "OLLAMA_URL=http://localhost:11434" > .env
+>   echo "OLLAMA_MODEL=llama3" >> .env
+>   ```
 
 ### Option 2: Manual Setup
 
@@ -148,9 +153,13 @@ deepwiki/
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `GOOGLE_API_KEY` | Google Gemini API key for AI generation | Yes |
-| `OPENAI_API_KEY` | OpenAI API key for embeddings | Yes |
+| `GOOGLE_API_KEY` | Google Gemini API key for AI generation | Yes (unless using Ollama) |
+| `OPENAI_API_KEY` | OpenAI API key for embeddings | Yes (unless using Ollama) |
+| `OLLAMA_URL` | URL for local Ollama server (e.g., `http://localhost:11434`) | Only for Ollama mode |
+| `OLLAMA_MODEL` | Model name to use with Ollama (e.g., `llama3`) | Only for Ollama mode |
 | `PORT` | Port for the API server (default: 8001) | No |
+
+> **Note:** When both `OLLAMA_URL` and `OLLAMA_MODEL` are provided, DeepWiki will run in Ollama mode using your local LLM exclusively. This mode does not require Google or OpenAI API keys.
 
 ### Docker Setup
 
@@ -180,9 +189,13 @@ docker-compose up
 You can also mount a .env file to the container:
 
 ```bash
-# Create a .env file with your API keys
+# Option 1: Create a .env file with API keys (for cloud models)
 echo "GOOGLE_API_KEY=your_google_api_key" > .env
 echo "OPENAI_API_KEY=your_openai_api_key" >> .env
+
+# Option 2: Create a .env file for Ollama (for local models)
+echo "OLLAMA_URL=http://host.docker.internal:11434" > .env
+echo "OLLAMA_MODEL=llama3" >> .env
 
 # Run the container with the .env file mounted
 docker run -p 8001:8001 -p 3000:3000 \
@@ -190,6 +203,8 @@ docker run -p 8001:8001 -p 3000:3000 \
   -v ~/.adalflow:/root/.adalflow \
   ghcr.io/asyncfuncai/deepwiki-open:latest
 ```
+
+> **Note for Docker users with Ollama**: When running Ollama in a separate container or on the host, use `host.docker.internal` instead of `localhost` in the `OLLAMA_URL` to connect from within the Docker container.
 
 #### Building the Docker image locally
 
@@ -236,8 +251,14 @@ For more details, see the [API README](./api/README.md).
 ## ❓ Troubleshooting
 
 ### API Key Issues
-- **"Missing environment variables"**: Make sure your `.env` file is in the project root and contains both API keys
+- **"Missing environment variables"**: Make sure your `.env` file is in the project root and contains both API keys (or Ollama configuration)
 - **"API key not valid"**: Check that you've copied the full key correctly with no extra spaces
+- **Using Ollama**: If using Ollama, ensure both `OLLAMA_URL` and `OLLAMA_MODEL` are set, and that the Ollama server is running
+
+### Ollama-specific Issues
+- **"Connection refused to Ollama server"**: Make sure your Ollama server is running at the URL specified in `OLLAMA_URL`
+- **"Model not found"**: Verify that the model specified in `OLLAMA_MODEL` is available in your Ollama server (you may need to run `ollama pull <model>` first)
+- **Docker users**: If using Ollama from within Docker, use `http://host.docker.internal:11434` as the URL to connect to Ollama on the host machine
 
 ### Connection Problems
 - **"Cannot connect to API server"**: Make sure the API server is running on port 8001
